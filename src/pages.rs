@@ -7,9 +7,16 @@ markup::define! {
         challenge_type: Option<sierra_keygen::ChallengeType>,
         challenge: Option<String>,
         challenge_response: Option<Vec<u8>>,
+        hcaptcha_sitekey: Option<String>,
         error_msg: Option<String>
     ) {
         html {
+            head {
+                title { "Sierra Keygen" }
+                @if let Some(_) = hcaptcha_sitekey {
+                        script[src = "https://js.hcaptcha.com/1/api.js?recaptchacompat=off", async, defer] {}
+                }
+            }
             body {
                 h1 { "Sierra Keygen" }
                 @if let Some(err_msg) = error_msg {
@@ -43,6 +50,7 @@ markup::define! {
                                     }
                                 }
                             }
+
                             tr {
                                 td {
                                     label[for = "challenge_type"] {
@@ -66,6 +74,7 @@ markup::define! {
                                     }
                                 }
                             }
+
                             tr {
                                 td {
                                     label[for = "challenge"] {
@@ -81,10 +90,13 @@ markup::define! {
                                 }
 
                             }
-                            tr {
-                                td {}
-                                td {
-                                    "Captcha placeholder"
+
+                            @if let Some(hcaptcha_site_id) = hcaptcha_sitekey {
+                                tr {
+                                    td {}
+                                    td {
+                                        div[class = "h-captcha", "data-sitekey" = hcaptcha_site_id] {}
+                                    }
                                 }
                             }
 
@@ -94,6 +106,7 @@ markup::define! {
                                     input[type = "submit", value = "Generate"] {}
                                 }
                             }
+
                             @if let Some(challenge_type) = challenge_type {
                                 @if let Some(challenge_response) = challenge_response {
                                     // spacer

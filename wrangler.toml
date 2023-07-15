@@ -4,3 +4,10 @@ compatibility_date = "2023-03-22"
 
 [build]
 command = "cargo install -q worker-build && worker-build --release"
+
+[vars]
+HCAPTCHA_SITEKEY = "08d66dcc-f0d8-4d05-8a47-3a2f53d9e400"
+
+# secrets required:
+# - HCAPTCHA_SECRET (hcaptcha will be disabled without this)
+

@@ -1,3 +1,4 @@
+mod captcha;
 mod pages;
 use std::str::FromStr;
 
@@ -5,13 +6,27 @@ use sierra_keygen::{ChallengeType, DeviceGeneration};
 use worker::*;
 
 #[event(fetch)]
-async fn main(mut req: Request, _env: Env, _ctx: Context) -> Result<Response> {
+async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let hcaptcha_secret = match env.secret("HCAPTCHA_SECRET") {
+        Ok(val) => Some(val.to_string()),
+        Err(_) => None,
+    };
+    let hcaptcha_sitekey = if hcaptcha_secret.is_some() {
+        match env.var("HCAPTCHA_SITEKEY") {
+            Ok(val) => Some(val.to_string()),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     if req.method() == Method::Get {
         let page = pages::Main {
             device_generation: None,
             challenge_type: None,
             challenge: None,
             challenge_response: None,
+            hcaptcha_sitekey,
             error_msg: None,
         };
 
@@ -22,7 +37,27 @@ async fn main(mut req: Request, _env: Env, _ctx: Context) -> Result<Response> {
         let mut error_msg: Option<String> = None;
 
         // captcha
-        // TODO
+        let h_captcha_response = match params.get("h-captcha-response") {
+            Some(FormEntry::Field(val)) => Some(val),
+            _ => None,
+        };
+        if h_captcha_response.is_some() {
+            let captcha_valid = match captcha::verify_captcha(
+                h_captcha_response.as_ref().unwrap(),
+                hcaptcha_secret.as_ref().unwrap(),
+                hcaptcha_sitekey.as_ref().unwrap(),
+            )
+            .await
+            {
+                Some(val) => val,
+                None => false,
+            };
+            if !captcha_valid {
+                error_msg = Some("Invalid CAPTCHA".to_string());
+            }
+        } else {
+            error_msg = Some("Invalid CAPTCHA".to_string());
+        }
 
         // device_generation
         let device_generation = match params.get("device_generation") {
@@ -71,6 +106,7 @@ async fn main(mut req: Request, _env: Env, _ctx: Context) -> Result<Response> {
                 challenge_type,
                 challenge: challenge_str,
                 challenge_response: None,
+                hcaptcha_sitekey,
                 error_msg,
             };
             return Response::from_html(page.to_string());
@@ -89,6 +125,7 @@ async fn main(mut req: Request, _env: Env, _ctx: Context) -> Result<Response> {
                 challenge_type,
                 challenge: challenge_str,
                 challenge_response: None,
+                hcaptcha_sitekey,
                 error_msg: Some(format!("{:?}", challenge_response.err().unwrap())),
             };
             return Response::from_html(page.to_string());
@@ -99,6 +136,7 @@ async fn main(mut req: Request, _env: Env, _ctx: Context) -> Result<Response> {
             challenge_type,
             challenge: challenge_str,
             challenge_response: challenge_response.ok(),
+            hcaptcha_sitekey,
             error_msg: None,
         };
 
