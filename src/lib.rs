@@ -2,11 +2,51 @@ mod captcha;
 mod pages;
 use std::str::FromStr;
 
+use base64::Engine as _;
 use sierra_keygen::{ChallengeType, DeviceGeneration};
 use worker::*;
 
+fn parse_auth_header(auth: &str) -> Option<(String, String)> {
+    if !auth.starts_with("Basic ") {
+        return None;
+    }
+
+    Some(auth)
+        .map(|s| s.trim_start_matches("Basic "))
+        .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s.as_bytes()).ok())
+        .and_then(|s| String::from_utf8(s).ok())
+        .and_then(|s| {
+            s.split_once(':')
+                .and_then(|(u, p)| Some((u.to_string(), p.to_string())))
+        })
+}
+
 #[event(fetch)]
 async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let auth = req
+        .headers()
+        .get("Authorization")
+        .unwrap()
+        .and_then(|s| parse_auth_header(s.as_ref()))
+        .map(|(username, password)| {
+            if !username.chars().all(|c| c.is_ascii_alphanumeric()) {
+                return false; // invalid username -- should be alphanumeric
+            }
+
+            let expected_password =
+                match env.secret(format!("BASIC_AUTH_USER_{}", username.to_lowercase()).as_str()) {
+                    Ok(val) => Ok(val.to_string()),
+                    Err(_) => Err(()),
+                };
+
+            return expected_password.is_ok_and(|pw| pw.len() > 0 && pw == password);
+        });
+    if !auth.unwrap_or(false) {
+        let mut headers = Headers::new();
+        let _ = headers.set("WWW-Authenticate", "Basic");
+        return Ok(Response::error("Unauthorized", 401)?.with_headers(headers));
+    }
+
     let hcaptcha_secret = match env.secret("HCAPTCHA_SECRET") {
         Ok(val) => Some(val.to_string()),
         Err(_) => None,

@@ -12,13 +12,13 @@ markup::define! {
     ) {
         html {
             head {
-                title { "Sierra Keygen" }
+                title { "sierra-keygen" }
                 @if let Some(_) = hcaptcha_sitekey {
                         script[src = "https://js.hcaptcha.com/1/api.js?recaptchacompat=off", async, defer] {}
                 }
             }
             body {
-                h1 { "Sierra Keygen" }
+                h1 { "sierra-keygen" }
                 @if let Some(err_msg) = error_msg {
                     p[class = "error", style = "color: red; weight: bold;"] {
                         @err_msg
