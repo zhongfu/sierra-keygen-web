@@ -13,7 +13,11 @@ fn parse_auth_header(auth: &str) -> Option<(String, String)> {
 
     Some(auth)
         .map(|s| s.trim_start_matches("Basic "))
-        .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s.as_bytes()).ok())
+        .and_then(|s| {
+            base64::engine::general_purpose::STANDARD
+                .decode(s.as_bytes())
+                .ok()
+        })
         .and_then(|s| String::from_utf8(s).ok())
         .and_then(|s| {
             s.split_once(':')
@@ -23,14 +27,14 @@ fn parse_auth_header(auth: &str) -> Option<(String, String)> {
 
 #[event(fetch)]
 async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let auth = req
+    let authed_user = req
         .headers()
         .get("Authorization")
         .unwrap()
         .and_then(|s| parse_auth_header(s.as_ref()))
-        .map(|(username, password)| {
+        .and_then(|(username, password)| {
             if !username.chars().all(|c| c.is_ascii_alphanumeric()) {
-                return false; // invalid username -- should be alphanumeric
+                return None; // invalid username -- should be alphanumeric
             }
 
             let expected_password =
@@ -39,9 +43,13 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     Err(_) => Err(()),
                 };
 
-            return expected_password.is_ok_and(|pw| pw.len() > 0 && pw == password);
+            if expected_password.is_ok_and(|pw| pw.len() > 0 && pw == password) {
+                Some(username)
+            } else {
+                None
+            }
         });
-    if !auth.unwrap_or(false) {
+    if authed_user.is_none() {
         let mut headers = Headers::new();
         let _ = headers.set("WWW-Authenticate", "Basic");
         return Ok(Response::error("Unauthorized", 401)?.with_headers(headers));
@@ -152,6 +160,14 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             return Response::from_html(page.to_string());
         }
 
+        console_log!(
+            "{} generating code for {} {} {}",
+            authed_user.unwrap(),
+            device_generation.clone().unwrap(),
+            challenge_type.clone().unwrap(),
+            challenge_str.clone().unwrap()
+        );
+
         // otherwise, generate key
         let challenge_response = sierra_keygen::generate_code(
             device_generation.clone().unwrap(),
@@ -160,14 +176,16 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
         );
 
         if challenge_response.is_err() {
+            let err_str = format!("{:?}", challenge_response.err().unwrap());
             let page = pages::Main {
                 device_generation,
                 challenge_type,
                 challenge: challenge_str,
                 challenge_response: None,
                 hcaptcha_sitekey,
-                error_msg: Some(format!("{:?}", challenge_response.err().unwrap())),
+                error_msg: Some(format!("Error: {}", err_str)),
             };
+            console_error!("got error while generating challenge: {}", err_str);
             return Response::from_html(page.to_string());
         }
 
