@@ -1,0 +1,7 @@
+# rust
+/target
+/Cargo.lock
+
+# js
+/build
+/node_modules
