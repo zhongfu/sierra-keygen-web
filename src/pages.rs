@@ -113,6 +113,16 @@ markup::define! {
                                     tr[style = "height: 20px;"] {}
                                     tr {
                                         td {
+                                            "Received challenge:"
+                                        }
+                                        td {
+                                            p[style = "font-family: monospace;"] {
+                                                @format!("{}", challenge.as_ref().unwrap().to_uppercase())
+                                            }
+                                        }
+                                    }
+                                    tr {
+                                        td {
                                             "Challenge response:"
                                         }
                                         td {
