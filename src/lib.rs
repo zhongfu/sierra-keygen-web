@@ -85,7 +85,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
         // challenge
         let challenge_str = match params.get("challenge") {
-            Some(FormEntry::Field(val)) => Some(val),
+            Some(FormEntry::Field(val)) => Some(val.trim().to_string()),
             _ => None,
         };
         let challenge = match &challenge_str {
