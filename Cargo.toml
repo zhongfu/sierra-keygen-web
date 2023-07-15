@@ -1,0 +1,23 @@
+[package]
+name = "sierra-keygen-web"
+version = "0.1.0"
+edition = "2021"
+
+# https://github.com/rustwasm/wasm-pack/issues/1247
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hex = "0.4.3"
+markup = "0.13.1"
+sierra-keygen-rs = { git = "ssh://git@github.com/zhongfu/sierra-keygen-rs.git", version = "0.1.1" }
+strum = "0.25.0"
+worker = "0.0.15"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
