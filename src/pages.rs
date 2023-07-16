@@ -127,7 +127,7 @@ markup::define! {
                                         }
                                         td {
                                             p[style = "font-family: monospace;"] {
-                                                @format!("AT+{}=\"{}\"", challenge_type.to_string(), hex::encode(challenge_response).to_uppercase())
+                                                @format!("AT!{}=\"{}\"", challenge_type.to_string(), hex::encode(challenge_response).to_uppercase())
                                             }
                                         }
                                     }
