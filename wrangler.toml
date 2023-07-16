@@ -7,7 +7,9 @@ command = "cargo install -q worker-build && worker-build --release"
 
 [vars]
 HCAPTCHA_SITEKEY = "08d66dcc-f0d8-4d05-8a47-3a2f53d9e400"
+LOGFLARE_SOURCE_ID = "1bbb8d8e-d5a1-484f-89cd-1189f615427b"
 
 # secrets required:
 # - HCAPTCHA_SECRET (hcaptcha will be disabled without this)
-
+# - LOGFLARE_API_KEY
+# - BASIC_AUTH_USER_xxxxx

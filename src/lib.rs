@@ -1,8 +1,13 @@
 mod captcha;
+mod log;
 mod pages;
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use base64::Engine as _;
+use log::LogLevel;
 use sierra_keygen::{ChallengeType, DeviceGeneration};
 use worker::*;
 
@@ -27,6 +32,46 @@ fn parse_auth_header(auth: &str) -> Option<(String, String)> {
 
 #[event(fetch)]
 async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let logs: Arc<Mutex<Vec<log::LogMessage>>> = Arc::new(Mutex::new(vec![]));
+    let logflare_api_key = match env.secret("LOGFLARE_API_KEY") {
+        Ok(val) => Some(val.to_string()),
+        Err(_) => None,
+    };
+    let logflare_source_id = match env.var("LOGFLARE_SOURCE_ID") {
+        Ok(val) => Some(val.to_string()),
+        Err(_) => None,
+    };
+    let logging_enabled = logflare_api_key.is_some() && logflare_source_id.is_some();
+
+    let log = |level: LogLevel, msg: String| {
+        match level {
+            LogLevel::Error => console_error!("{}", msg),
+            LogLevel::Warn => console_warn!("{}", msg),
+            LogLevel::Info => console_log!("{}", msg),
+            LogLevel::Debug => console_debug!("{}", msg),
+        }
+        // give up if we can't get a lock
+        let _ = logs
+            .lock()
+            .and_then(|mut l| Ok(l.push(log::make_log(level, msg))));
+    };
+
+    let post_logs = || async {
+        if !logging_enabled {
+            return;
+        }
+        // give up if we can't get a lock
+        let logs = logs.lock();
+        if logs.is_ok() && logs.as_ref().unwrap().len() > 0 {
+            log::log(
+                logflare_api_key.unwrap().as_str(),
+                logflare_source_id.unwrap().as_str(),
+                logs.unwrap().clone(),
+            )
+            .await;
+        }
+    };
+
     let authed_user = req
         .headers()
         .get("Authorization")
@@ -52,6 +97,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     if authed_user.is_none() {
         let mut headers = Headers::new();
         let _ = headers.set("WWW-Authenticate", "Basic");
+        post_logs().await;
         return Ok(Response::error("Unauthorized", 401)?.with_headers(headers));
     }
 
@@ -78,6 +124,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             error_msg: None,
         };
 
+        post_logs().await;
         return Response::from_html(page.to_string());
     } else if req.method() == Method::Post {
         let params = req.form_data().await?;
@@ -157,15 +204,19 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 hcaptcha_sitekey,
                 error_msg,
             };
+            post_logs().await;
             return Response::from_html(page.to_string());
         }
 
-        console_log!(
-            "{} generating code for {} {} {}",
-            authed_user.unwrap(),
-            device_generation.clone().unwrap(),
-            challenge_type.clone().unwrap(),
-            challenge_str.clone().unwrap()
+        log(
+            LogLevel::Info,
+            format!(
+                "{} generating code for {} {} {}",
+                authed_user.unwrap(),
+                device_generation.clone().unwrap(),
+                challenge_type.clone().unwrap(),
+                challenge_str.clone().unwrap()
+            ),
         );
 
         // otherwise, generate key
@@ -185,7 +236,11 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 hcaptcha_sitekey,
                 error_msg: Some(format!("Error: {}", err_str)),
             };
-            console_error!("got error while generating challenge: {}", err_str);
+            log(
+                LogLevel::Error,
+                format!("got error while generating challenge: {}", err_str),
+            );
+            post_logs().await;
             return Response::from_html(page.to_string());
         }
 
@@ -198,8 +253,10 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             error_msg: None,
         };
 
+        post_logs().await;
         return Response::from_html(page.to_string());
     } else {
+        post_logs().await;
         return Response::error("Method not allowed", 405);
     }
 }
