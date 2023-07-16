@@ -32,6 +32,10 @@ fn parse_auth_header(auth: &str) -> Option<(String, String)> {
 
 #[event(fetch)]
 async fn main(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
+    if req.path() != "/" {
+        return Response::error("Not Found", 404);
+    }
+
     let logs: Arc<Mutex<Vec<log::LogMessage>>> = Arc::new(Mutex::new(vec![]));
     let logflare_api_key = match env.secret("LOGFLARE_API_KEY") {
         Ok(val) => Some(val.to_string()),
