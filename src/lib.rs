@@ -31,7 +31,7 @@ fn parse_auth_header(auth: &str) -> Option<(String, String)> {
 }
 
 #[event(fetch)]
-async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+async fn main(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
     let logs: Arc<Mutex<Vec<log::LogMessage>>> = Arc::new(Mutex::new(vec![]));
     let logflare_api_key = match env.secret("LOGFLARE_API_KEY") {
         Ok(val) => Some(val.to_string()),
@@ -56,20 +56,23 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             .and_then(|mut l| Ok(l.push(log::make_log(level, msg))));
     };
 
-    let post_logs = || async {
-        if !logging_enabled {
-            return;
-        }
-        // give up if we can't get a lock
-        let logs = logs.lock();
-        if logs.is_ok() && logs.as_ref().unwrap().len() > 0 {
-            log::log(
-                logflare_api_key.unwrap().as_str(),
-                logflare_source_id.unwrap().as_str(),
-                logs.unwrap().clone(),
-            )
-            .await;
-        }
+    let post_logs = || {
+        let logs = logs.clone();
+        ctx.wait_until(async move {
+            if !logging_enabled {
+                return;
+            }
+            // give up if we can't get a lock
+            let logs = logs.lock();
+            if logs.is_ok() && logs.as_ref().unwrap().len() > 0 {
+                log::log(
+                    logflare_api_key.unwrap().as_str(),
+                    logflare_source_id.unwrap().as_str(),
+                    logs.unwrap().clone(),
+                )
+                .await;
+            }
+        });
     };
 
     let authed_user = req
@@ -97,7 +100,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     if authed_user.is_none() {
         let mut headers = Headers::new();
         let _ = headers.set("WWW-Authenticate", "Basic");
-        post_logs().await;
+        post_logs();
         return Ok(Response::error("Unauthorized", 401)?.with_headers(headers));
     }
 
@@ -124,7 +127,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             error_msg: None,
         };
 
-        post_logs().await;
+        post_logs();
         return Response::from_html(page.to_string());
     } else if req.method() == Method::Post {
         let params = req.form_data().await?;
@@ -204,7 +207,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 hcaptcha_sitekey,
                 error_msg,
             };
-            post_logs().await;
+            post_logs();
             return Response::from_html(page.to_string());
         }
 
@@ -240,7 +243,7 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 LogLevel::Error,
                 format!("got error while generating challenge: {}", err_str),
             );
-            post_logs().await;
+            post_logs();
             return Response::from_html(page.to_string());
         }
 
@@ -253,10 +256,10 @@ async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             error_msg: None,
         };
 
-        post_logs().await;
+        post_logs();
         return Response::from_html(page.to_string());
     } else {
-        post_logs().await;
+        post_logs();
         return Response::error("Method not allowed", 405);
     }
 }
