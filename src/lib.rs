@@ -91,26 +91,28 @@ async fn main(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
         let mut error_msg: Option<String> = None;
 
         // captcha
-        let h_captcha_response = match params.get("h-captcha-response") {
-            Some(FormEntry::Field(val)) => Some(val),
-            _ => None,
-        };
-        if h_captcha_response.is_some() {
-            let captcha_valid = match captcha::verify_captcha(
-                h_captcha_response.as_ref().unwrap(),
-                hcaptcha_secret.as_ref().unwrap(),
-                hcaptcha_sitekey.as_ref().unwrap(),
-            )
-            .await
-            {
-                Some(val) => val,
-                None => false,
+        if hcaptcha_sitekey.is_some() {
+            let h_captcha_response = match params.get("h-captcha-response") {
+                Some(FormEntry::Field(val)) => Some(val),
+                _ => None,
             };
-            if !captcha_valid {
+            if h_captcha_response.is_some() {
+                let captcha_valid = match captcha::verify_captcha(
+                    h_captcha_response.as_ref().unwrap(),
+                    hcaptcha_secret.as_ref().unwrap(),
+                    hcaptcha_sitekey.as_ref().unwrap(),
+                )
+                .await
+                {
+                    Some(val) => val,
+                    None => false,
+                };
+                if !captcha_valid {
+                    error_msg = Some("Invalid CAPTCHA".to_string());
+                }
+            } else {
                 error_msg = Some("Invalid CAPTCHA".to_string());
             }
-        } else {
-            error_msg = Some("Invalid CAPTCHA".to_string());
         }
 
         // device_generation
