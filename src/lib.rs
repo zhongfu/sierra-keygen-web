@@ -6,7 +6,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use base64::Engine as _;
 use log::LogLevel;
 use sierra_keygen::{ChallengeType, DeviceGeneration};
 use worker::*;
